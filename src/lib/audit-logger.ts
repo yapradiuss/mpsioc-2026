@@ -140,6 +140,9 @@ const fetchPublicIp = async (): Promise<string | null> => {
   return null;
 };
 
+// Cache user agent (doesn't change during session)
+let cachedUserAgent = '';
+
 /**
  * Get client info (cached)
  */
@@ -147,20 +150,14 @@ const getClientInfo = (): { ip: string | null; userAgent: string } => {
   if (typeof window === 'undefined') {
     return { ip: null, userAgent: '' };
   }
-  
-  // Cache user agent (doesn't change during session)
-  if (!getClientInfo.userAgent) {
-    getClientInfo.userAgent = navigator.userAgent;
+  if (!cachedUserAgent) {
+    cachedUserAgent = navigator.userAgent;
   }
-  
   return {
-    ip: cachedClientIp, // Use cached IP if available
-    userAgent: getClientInfo.userAgent,
+    ip: cachedClientIp,
+    userAgent: cachedUserAgent,
   };
 };
-
-// Attach userAgent cache to function
-(getClientInfo as any).userAgent = '';
 
 // Fetch IP on module load (non-blocking)
 if (typeof window !== 'undefined') {
@@ -176,12 +173,6 @@ const flushLogQueue = async (): Promise<void> => {
   const logsToSend = logQueue.splice(0, BATCH_SIZE);
   
   try {
-    // Use sendBeacon for better reliability if available, otherwise fetch
-    if (navigator.sendBeacon && logsToSend.length === 1) {
-      // sendBeacon is good for single logs, but doesn't support custom headers well
-      // So we'll use fetch for better control
-    }
-    
     await fetch(`${API_BASE_URL}/api/audit-trail/batch`, {
       method: 'POST',
       headers: {

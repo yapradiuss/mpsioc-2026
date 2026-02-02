@@ -242,17 +242,17 @@ export default function IOCDashboardPage() {
   useEffect(() => {
     const preferences = loadPreferences();
     if (preferences) {
-      // Apply map filter preferences
-      const newFilters = { ...DEFAULT_MAP_FILTERS };
+      // Apply map filter preferences (type as Record so boolean assignment is valid)
+      const newFilters: Record<keyof typeof DEFAULT_MAP_FILTERS, boolean> = { ...DEFAULT_MAP_FILTERS };
       preferences.mapFilters.forEach((filter) => {
         if (filter.id in newFilters) {
           newFilters[filter.id as keyof typeof newFilters] = filter.enabled;
         }
       });
-      setMapFilters(newFilters);
+      setMapFilters(newFilters as typeof DEFAULT_MAP_FILTERS);
 
-      // Apply widget preferences
-      const newVisibility = { ...DEFAULT_WIDGET_VISIBILITY };
+      // Apply widget preferences (type as Record so boolean assignment is valid)
+      const newVisibility: Record<keyof typeof DEFAULT_WIDGET_VISIBILITY, boolean> = { ...DEFAULT_WIDGET_VISIBILITY };
       preferences.widgets.forEach((widget) => {
         if (widget.id in newVisibility) {
           newVisibility[widget.id as keyof typeof newVisibility] = widget.enabled;
@@ -272,10 +272,10 @@ export default function IOCDashboardPage() {
           setWidgetSizes((prev) => ({
             ...prev,
             [widget.id]: widget.size,
-          }));
+          } as Record<string, { width: number; height: number }>));
         }
       });
-      setWidgetVisibility(newVisibility);
+      setWidgetVisibility(newVisibility as typeof DEFAULT_WIDGET_VISIBILITY);
     }
   }, []);
 

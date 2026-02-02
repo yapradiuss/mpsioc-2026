@@ -127,10 +127,11 @@ export default function HumanCounting({
       const locationsToUse = locs.length ? locs : fallbackLocs;
       const locationIds = locationsToUse.map((l: Location) => l.id);
 
-      const chart: ChartDataPoint[] = raw.map((day: Record<string, unknown>) => {
-        const row: ChartDataPoint = { date: String(day.date ?? "") };
+      const chart: ChartDataPoint[] = raw.map((day: unknown) => {
+        const d = day as Record<string, unknown>;
+        const row: ChartDataPoint = { date: String(d.date ?? "") };
         locationIds.forEach((id) => {
-          row[id] = Number(day[id] ?? 0);
+          row[id] = Number(d[id] ?? 0);
         });
         return row;
       });

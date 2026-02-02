@@ -6025,7 +6025,7 @@ export default function GoogleMap({
                 <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: bold;">${streetlight.device_name || streetlight.device_id || 'Loranet Streetlight'}</h3>
                 <p style="margin: 4px 0; font-size: 14px;"><strong>Device ID:</strong> ${streetlight.device_id || 'N/A'}</p>
                 <p style="margin: 4px 0; font-size: 14px;"><strong>Status:</strong> ${streetlight.device_status || 'N/A'}</p>
-                <p style="margin: 4px 0; font-size: 14px;"><strong>Power:</strong> ${streetlight.status_power === 1 || streetlight.status_power === '1' ? 'ON' : streetlight.status_power === 0 || streetlight.status_power === '0' ? 'OFF' : (streetlight.status_power ?? 'N/A')}</p>
+                <p style="margin: 4px 0; font-size: 14px;"><strong>Power:</strong> ${String(streetlight.status_power) === '1' ? 'ON' : String(streetlight.status_power) === '0' ? 'OFF' : (streetlight.status_power ?? 'N/A')}</p>
                 ${streetlight.dim_value !== undefined && streetlight.dim_value !== null ? `<p style="margin: 4px 0; font-size: 14px;"><strong>Brightness:</strong> ${streetlight.dim_value}${typeof streetlight.dim_value === 'number' ? '%' : ''}</p>` : ''}
                 ${streetlight.light_type ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Type:</strong> ${streetlight.light_type}</p>` : ''}
                 ${streetlight.brand ? `<p style="margin: 4px 0; font-size: 12px;"><strong>Brand:</strong> ${streetlight.brand}</p>` : ''}

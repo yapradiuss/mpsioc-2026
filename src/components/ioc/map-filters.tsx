@@ -108,7 +108,7 @@ interface FilterItem {
   label: string;
   icon?: string | React.ReactNode;
   enabled: boolean;
-  onChange: (enabled: boolean) => void;
+  onChange?: (enabled: boolean) => void;
   color?: string;
 }
 

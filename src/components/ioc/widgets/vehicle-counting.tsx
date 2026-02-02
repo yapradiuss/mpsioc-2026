@@ -121,7 +121,7 @@ export default function VehicleCounting({
       }
 
       if (!response.ok) {
-        const msg = data?.message || data?.error || `Failed to fetch (${response.status})`;
+        const msg = data?.message || (data as { error?: string })?.error || `Failed to fetch (${response.status})`;
         throw new Error(msg);
       }
 
@@ -130,15 +130,18 @@ export default function VehicleCounting({
       const cams = Array.isArray(payload?.cameras) ? payload.cameras : [];
       const camerasToUse = cams.length ? cams : Object.entries(CAMERA_NAMES).map(([id, name]) => ({ id, name, code: id }));
 
-      const chart: ChartDataPoint[] = raw.map((day: Record<string, unknown>) => ({
-        date: String(day.date ?? ""),
-        C01: Number(day.C01 ?? 0),
-        C02: Number(day.C02 ?? 0),
-        C03: Number(day.C03 ?? 0),
-        C04: Number(day.C04 ?? 0),
-        C05: Number(day.C05 ?? 0),
-        C06: Number(day.C06 ?? 0),
-      }));
+      const chart: ChartDataPoint[] = raw.map((day: unknown) => {
+        const d = day as Record<string, unknown>;
+        return {
+          date: String(d.date ?? ""),
+          C01: Number(d.C01 ?? 0),
+          C02: Number(d.C02 ?? 0),
+          C03: Number(d.C03 ?? 0),
+          C04: Number(d.C04 ?? 0),
+          C05: Number(d.C05 ?? 0),
+          C06: Number(d.C06 ?? 0),
+        };
+      });
       setChartData(chart);
       setCameras(camerasToUse);
       const total = chart.reduce((sum: number, day: ChartDataPoint) => {

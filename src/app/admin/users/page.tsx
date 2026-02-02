@@ -268,10 +268,14 @@ export default function UsersPage() {
         page_ids: selectedPages,
       };
 
-      // Remove password if empty in edit mode
-      if (isEditMode && !payload.password) {
-        delete payload.password;
-      }
+      // Omit password when empty in edit mode (avoid sending empty password)
+      const body =
+        isEditMode && !payload.password
+          ? (() => {
+              const { password: _p, ...rest } = payload;
+              return rest;
+            })()
+          : payload;
 
       const url = isEditMode
         ? `${API_BASE_URL}/api/user-management/users/${editingUserId}`
@@ -284,7 +288,7 @@ export default function UsersPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
