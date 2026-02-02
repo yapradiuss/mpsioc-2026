@@ -1,8 +1,11 @@
 import type { NextConfig } from "next";
 
-const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+// Use first URL if comma-separated (e.g. "http://localhost:3001, http://other")
+const backendUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001").split(",")[0].trim();
 
 const nextConfig: NextConfig = {
+  // Next.js 16 uses Turbopack by default; empty config satisfies build when webpack is also set
+  turbopack: {},
   async rewrites() {
     return [
       { source: "/api/human-counting/:path*", destination: `${backendUrl}/api/human-counting/:path*` },

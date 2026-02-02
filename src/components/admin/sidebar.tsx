@@ -70,11 +70,11 @@ const sidebarItems = [
   },
 ];
 
+import { API_BASE_URL } from "@/lib/api";
+
 interface SidebarProps {
   className?: string;
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname();

@@ -12,6 +12,7 @@ import { FileText, Calendar, AlertCircle, Maximize2, TrendingUp, Receipt } from 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { API_BASE_URL } from "@/lib/api";
 
 // Register Chart.js components
 ChartJS.register(ArcElement, Tooltip, Legend);
@@ -35,8 +36,6 @@ interface EkompaunSummary {
     jenis_kompaun_count: number;
   };
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 // Color palette for jenis kompaun types
 const JENIS_KOMPAUN_COLORS: Record<string, string> = {

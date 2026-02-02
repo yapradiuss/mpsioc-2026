@@ -16,9 +16,9 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-// Constants
+import { API_BASE_URL } from "@/lib/api";
+
 const REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 // Interface for snapshot metadata from backend
 interface SnapshotMetadata {

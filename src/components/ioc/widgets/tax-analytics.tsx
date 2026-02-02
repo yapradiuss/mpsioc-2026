@@ -15,6 +15,7 @@ import { Receipt, TrendingUp, Maximize2, DollarSign, FileText, AlertCircle } fro
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { API_BASE_URL } from "@/lib/api";
 
 // Register Chart.js components
 ChartJS.register(Tooltip, Legend, CategoryScale, LinearScale, BarElement, ArcElement);
@@ -43,8 +44,6 @@ interface TaxData {
   amount: number;
   count: number;
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 const CATEGORY_COLORS: Record<TaxCategory, string> = {
   current_income: "#10b981",

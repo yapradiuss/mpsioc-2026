@@ -35,8 +35,7 @@ import CompoundChart from "@/components/ioc/widgets/compound-chart";
 import TaxAnalytics from "@/components/ioc/widgets/tax-analytics";
 import VehicleCounting from "@/components/ioc/widgets/vehicle-counting";
 import HumanCounting from "@/components/ioc/widgets/human-counting";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from "@/lib/api";
 
 // Dynamically import GoogleMap with no SSR
 const GoogleMap = dynamic(() => import("@/components/ioc/google-map"), {

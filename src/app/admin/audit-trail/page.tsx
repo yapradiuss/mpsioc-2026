@@ -23,8 +23,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Search, FileText, Shield, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { logPageView } from "@/lib/audit-logger";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from "@/lib/api";
 
 type ActionType = 
   | "CREATE" 

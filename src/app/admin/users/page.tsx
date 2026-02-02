@@ -51,8 +51,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { logPageView } from "@/lib/audit-logger";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from "@/lib/api";
 
 interface Page {
   id: number;

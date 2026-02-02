@@ -11,8 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Lock, AlertCircle } from "lucide-react";
 import { logActivity } from "@/lib/audit-logger";
 import { isAuthenticated } from "@/lib/auth";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();

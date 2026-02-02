@@ -62,8 +62,7 @@ const EmojiPicker = dynamic(
   () => import('emoji-picker-react'),
   { ssr: false }
 );
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from "@/lib/api";
 
 interface NewsTicker {
   id: number;

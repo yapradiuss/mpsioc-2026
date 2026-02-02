@@ -18,8 +18,7 @@ import { MobileSidebar } from "./sidebar";
 import { Badge } from "@/components/ui/badge";
 import { logActivity } from "@/lib/audit-logger";
 import { getCurrentUser, type User as UserType } from "@/lib/auth";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from "@/lib/api";
 
 export function Header() {
   const router = useRouter();

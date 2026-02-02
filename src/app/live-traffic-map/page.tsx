@@ -23,8 +23,7 @@ import {
 import { useState, useEffect } from "react";
 import { getCurrentUser, type User as UserType } from "@/lib/auth";
 import { logActivity } from "@/lib/audit-logger";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from "@/lib/api";
 
 export default function LiveTrafficMapPage() {
   const router = useRouter();

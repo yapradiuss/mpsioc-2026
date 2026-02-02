@@ -104,6 +104,19 @@ The map is centered on:
 
 You can customize these coordinates in `src/app/ioc-dashboard/page.tsx`.
 
+## Vercel Deployment
+
+For builds on Vercel, set these **Environment Variables** in your project (Settings → Environment Variables):
+
+| Variable | Description | Example |
+|----------|--------------|---------|
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Google Maps API key (required for map) | Your key from Google Cloud Console |
+| `NEXT_PUBLIC_API_URL` | Backend API base URL (single URL) | `https://your-backend.vercel.app` or `http://43.217.149.217:3001` |
+
+- Use a **single** URL for `NEXT_PUBLIC_API_URL` in production (no commas).
+- Add them for **Production**, **Preview**, and **Development** as needed.
+- Redeploy after changing env vars so the build picks them up.
+
 ---
 
 For more information, see:

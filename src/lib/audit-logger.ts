@@ -3,7 +3,7 @@
  * Logs user activities to the backend audit trail API with batching and caching
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { API_BASE_URL } from "./api";
 
 export type ActionType = 
   | "CREATE" 

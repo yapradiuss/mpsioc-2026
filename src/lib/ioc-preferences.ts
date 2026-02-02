@@ -22,6 +22,8 @@ export interface IOCPreferences {
   lastUpdated?: string;
 }
 
+import { API_BASE_URL } from "./api";
+
 const PREFERENCES_KEY = 'ioc_dashboard_preferences';
 
 /**
@@ -163,8 +165,6 @@ export function savePreferences(preferences: IOCPreferences): boolean {
  * Save preferences to backend API (future implementation)
  */
 export async function savePreferencesToAPI(preferences: IOCPreferences): Promise<boolean> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  
   try {
     const token = localStorage.getItem('token');
     if (!token || token === 'authenticated') {
@@ -203,8 +203,6 @@ export async function savePreferencesToAPI(preferences: IOCPreferences): Promise
  * Load preferences from backend API (future implementation)
  */
 export async function loadPreferencesFromAPI(): Promise<IOCPreferences | null> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-  
   try {
     const token = localStorage.getItem('token');
     if (!token || token === 'authenticated') {
