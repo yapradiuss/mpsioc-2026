@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Car, TrendingUp, Maximize2, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,8 +15,29 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-// Use relative URL so Next.js rewrites proxy to backend
-const VEHICLE_COUNTING_API = "/api/vehicle-counting";
+// Dummy data: last 7 days vehicle counts per camera (no API)
+function getLast7DaysVehicle(): string[] {
+  const days: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+function buildDummyVehicleChartData(): { date: string; C01: number; C02: number; C03: number; C04: number; C05: number; C06: number }[] {
+  const dates = getLast7DaysVehicle();
+  return dates.map((date) => ({
+    date,
+    C01: 150 + Math.floor(Math.random() * 400) + 50,
+    C02: 200 + Math.floor(Math.random() * 350) + 100,
+    C03: 180 + Math.floor(Math.random() * 380) + 150,
+    C04: 220 + Math.floor(Math.random() * 300) + 200,
+    C05: 190 + Math.floor(Math.random() * 360) + 250,
+    C06: 210 + Math.floor(Math.random() * 320) + 300,
+  }));
+}
 
 interface VehicleCountingProps {
   initialPosition?: { x: number; y: number };
@@ -74,12 +95,12 @@ export default function VehicleCounting({
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
-  const [cameras, setCameras] = useState<Camera[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [totalCount, setTotalCount] = useState(0);
-  const abortRef = useRef<AbortController | null>(null);
+  const [chartData, setChartData] = useState<ChartDataPoint[]>(() => buildDummyVehicleChartData());
+  const cameras: Camera[] = Object.entries(CAMERA_NAMES).map(([id, name]) => ({ id, name, code: id }));
+  const totalCount = chartData.reduce(
+    (sum, day) => sum + day.C01 + day.C02 + day.C03 + day.C04 + day.C05 + day.C06,
+    0
+  );
 
   const MIN_WIDTH = 400;
   const MAX_WIDTH = 1200;
@@ -100,71 +121,7 @@ export default function VehicleCounting({
     }
   }, [disableInternalPositioning, initialSize?.width, initialSize?.height]);
 
-  // Fetch vehicle counting data (only show loading on first load)
-  const fetchData = useCallback(async (showLoading = true) => {
-    if (abortRef.current) abortRef.current.abort();
-    abortRef.current = new AbortController();
-    const signal = abortRef.current.signal;
-
-    try {
-      if (showLoading) setIsLoading(true);
-      setError(null);
-
-      const response = await fetch(`${VEHICLE_COUNTING_API}/last-7-days`, { signal });
-
-      let data: { success?: boolean; data?: { chartData?: unknown[]; cameras?: Camera[] }; message?: string } = {};
-      try {
-        const text = await response.text();
-        if (text) data = JSON.parse(text);
-      } catch {
-        throw new Error("Invalid response from server");
-      }
-
-      if (!response.ok) {
-        const msg = data?.message || (data as { error?: string })?.error || `Failed to fetch (${response.status})`;
-        throw new Error(msg);
-      }
-
-      const payload = data?.data;
-      const raw = Array.isArray(payload?.chartData) ? payload.chartData : [];
-      const cams = Array.isArray(payload?.cameras) ? payload.cameras : [];
-      const camerasToUse = cams.length ? cams : Object.entries(CAMERA_NAMES).map(([id, name]) => ({ id, name, code: id }));
-
-      const chart: ChartDataPoint[] = raw.map((day: unknown) => {
-        const d = day as Record<string, unknown>;
-        return {
-          date: String(d.date ?? ""),
-          C01: Number(d.C01 ?? 0),
-          C02: Number(d.C02 ?? 0),
-          C03: Number(d.C03 ?? 0),
-          C04: Number(d.C04 ?? 0),
-          C05: Number(d.C05 ?? 0),
-          C06: Number(d.C06 ?? 0),
-        };
-      });
-      setChartData(chart);
-      setCameras(camerasToUse);
-      const total = chart.reduce((sum: number, day: ChartDataPoint) => {
-        return sum + day.C01 + day.C02 + day.C03 + day.C04 + day.C05 + day.C06;
-      }, 0);
-      setTotalCount(total);
-    } catch (err: any) {
-      if (err.name === "AbortError") return;
-      console.error("Error fetching vehicle counting data:", err);
-      setError(err.message || "Failed to load vehicle counting data");
-    } finally {
-      if (showLoading) setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData(true);
-    const interval = setInterval(() => fetchData(false), 5 * 60 * 1000);
-    return () => {
-      clearInterval(interval);
-      if (abortRef.current) abortRef.current.abort();
-    };
-  }, [fetchData]);
+  const refreshDummy = () => setChartData(buildDummyVehicleChartData());
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (disableInternalPositioning) return;
@@ -333,7 +290,7 @@ export default function VehicleCounting({
                 Last 7 Days
               </Badge>
               <button
-                onClick={() => fetchData()}
+                onClick={refreshDummy}
                 className="p-1 hover:bg-white/10 rounded transition-colors"
                 title="Refresh data"
               >
@@ -369,15 +326,7 @@ export default function VehicleCounting({
 
           {/* Line Chart - fills remaining space */}
           <div className="flex-1 min-h-0 flex flex-col">
-            {isLoading ? (
-              <div className="flex items-center justify-center flex-1 min-h-[200px]">
-                <RefreshCw className="h-8 w-8 text-cyan-400 animate-spin" />
-              </div>
-            ) : error ? (
-              <div className="flex items-center justify-center flex-1 min-h-[200px] text-red-400 text-sm">
-                <p>{error}</p>
-              </div>
-            ) : !chartData.length ? (
+            {!chartData.length ? (
               <div className="flex flex-col items-center justify-center flex-1 min-h-[200px] text-white/60 gap-2 text-sm">
                 <Car className="h-10 w-10 text-cyan-400/60" />
                 <p>No vehicle data for last 7 days</p>

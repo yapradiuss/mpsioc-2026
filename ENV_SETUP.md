@@ -112,8 +112,8 @@ For builds on Vercel, set these **Environment Variables** in your project (Setti
 |----------|--------------|---------|
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Google Maps API key (required for map) | Your key from Google Cloud Console |
 | `NEXT_PUBLIC_API_URL` | Backend API base URL (single URL) | `https://your-backend.vercel.app` or `http://43.217.149.217:3001` |
-
 - Use a **single** URL for `NEXT_PUBLIC_API_URL` in production (no commas).
+- **Cron (CCTV refresh):** A cron runs every 10 minutes and hits `/api/cron/cctv-refresh` automatically (Next.js only, no Express, no secret required).
 - Add them for **Production**, **Preview**, and **Development** as needed.
 - Redeploy after changing env vars so the build picks them up.
 

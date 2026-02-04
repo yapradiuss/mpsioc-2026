@@ -12,7 +12,7 @@ import { FileText, Calendar, AlertCircle, Maximize2, TrendingUp, Receipt } from 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { API_BASE_URL } from "@/lib/api";
+const EKOMPAUN_DB_DATA_URL = "/api/db-data/ekompaun_mpsp_summary";
 
 // Register Chart.js components
 ChartJS.register(ArcElement, Tooltip, Legend);
@@ -97,7 +97,7 @@ export default function CompoundChart({
         setIsLoading(true);
         setError(null);
         
-        const response = await fetch(`${API_BASE_URL}/api/ekompaun_mpsp/summary/2025`);
+        const response = await fetch(EKOMPAUN_DB_DATA_URL);
         
         if (!response.ok) {
           throw new Error(`Failed to fetch compound analytics: ${response.status}`);

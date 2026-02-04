@@ -15,7 +15,7 @@ import { Receipt, TrendingUp, Maximize2, DollarSign, FileText, AlertCircle } fro
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { API_BASE_URL } from "@/lib/api";
+const TAX_ANALYTICS_DB_DATA_URL = "/api/db-data/maklumat_akaun_analytics";
 
 // Register Chart.js components
 ChartJS.register(Tooltip, Legend, CategoryScale, LinearScale, BarElement, ArcElement);
@@ -101,7 +101,7 @@ export default function TaxAnalytics({
         setIsLoading(true);
         setError(null);
         
-        const response = await fetch(`${API_BASE_URL}/api/maklumat_akaun/analytics`);
+        const response = await fetch(TAX_ANALYTICS_DB_DATA_URL);
         
         if (!response.ok) {
           throw new Error(`Failed to fetch tax analytics: ${response.status}`);

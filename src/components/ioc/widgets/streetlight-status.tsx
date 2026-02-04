@@ -27,17 +27,6 @@ interface StreetlightStatusProps {
   disableInternalPositioning?: boolean; // When true, widget is wrapped in DraggableWidget
 }
 
-// Helper function to map API status to widget status
-// ERP returns status_power as 0 | 1 (number); legacy API may use "ON" | "OFF" (string)
-const mapStatus = (deviceStatus?: string, powerStatus?: string | number): "online" | "offline" | "maintenance" => {
-  if (deviceStatus === "MAINTENANCE" || deviceStatus === "INACTIVE") {
-    return "maintenance";
-  }
-  const isOn = powerStatus === "ON" || powerStatus === 1 || powerStatus === "1" || deviceStatus === "ACTIVE";
-  if (isOn) return "online";
-  return "offline";
-};
-
 // Helper function to format time ago
 const formatTimeAgo = (timestamp: string | Date): string => {
   if (!timestamp) return "N/A";
@@ -54,7 +43,27 @@ const formatTimeAgo = (timestamp: string | Date): string => {
   return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
 };
 
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+// Dummy streetlight data: 3000 offline (no API)
+const DUMMY_OFFLINE_COUNT = 3000;
+const DUMMY_STREETLIGHTS: Streetlight[] = Array.from({ length: DUMMY_OFFLINE_COUNT }, (_, i) => {
+  const id = `SL-${String(i + 1).padStart(5, "0")}`;
+  const zone = ["Zone A", "Zone B", "Zone C", "Jalan Merdeka", "Persiaran Cyber"][i % 5];
+  return {
+    id,
+    name: `Streetlight ${i + 1}`,
+    location: `${zone}, Lamp ${(i % 100) + 1}`,
+    status: "offline" as const,
+    brightness: 0,
+    lastUpdate: new Date(Date.now() - (i % 60) * 60000).toISOString(),
+    device_id: id,
+    device_name: `Streetlight ${i + 1}`,
+    device_status: "OFF",
+    status_power: "0",
+    dim_value: 0,
+    latitude: (2.76 + (i % 100) * 0.001).toFixed(6),
+    longitude: (101.73 + (i % 100) * 0.001).toFixed(6),
+  };
+});
 
 export default function StreetlightStatus({ 
   initialPosition = { x: 100, y: 200 },
@@ -68,11 +77,8 @@ export default function StreetlightStatus({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
-  const [streetlights, setStreetlights] = useState<Streetlight[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const cacheRef = useRef(new Map<string, { data: Streetlight[]; timestamp: number }>());
+  const [streetlights, setStreetlights] = useState<Streetlight[]>(DUMMY_STREETLIGHTS);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(() => new Date());
 
   const MIN_WIDTH = 300;
   const MAX_WIDTH = 800;
@@ -86,101 +92,10 @@ export default function StreetlightStatus({
     }
   }, [disableInternalPositioning, initialSize?.width, initialSize?.height]);
 
-  // Fetch streetlight data from API
-  const fetchStreetlightStatus = async (forceRefresh = false) => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const apiUrl = '/api/loranet/streetlight';
-      const now = Date.now();
-      const cacheKey = 'all_streetlights';
-      const cached = cacheRef.current.get(cacheKey);
-      
-      // Check frontend cache if not forcing refresh
-      if (!forceRefresh && cached && (now - cached.timestamp) < CACHE_TTL) {
-        console.log('[FRONTEND CACHE HIT] Streetlights');
-        setStreetlights(cached.data);
-        setIsLoading(false);
-        setLastRefresh(new Date(cached.timestamp));
-        return;
-      }
-      
-      console.log('[FETCHING] Streetlight data from API');
-      const response = await fetch(apiUrl);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch streetlight data: ${response.status} ${response.statusText}`);
-      }
-      
-      const apiData = await response.json();
-      
-      if (!apiData.success) {
-        throw new Error(apiData.message || 'Failed to retrieve streetlight data');
-      }
-      
-      // Map API response to Streetlight interface (ERP: status_power 0|1, dim_value "180"|"180W")
-      const mappedStreetlights: Streetlight[] = (apiData.data || []).map((item: any) => {
-        const status = mapStatus(item.device_status, item.status_power);
-        const rawDim = item.dim_value ?? item.lantern_power;
-        const brightnessNum = typeof rawDim === "number" ? rawDim : parseInt(String(rawDim).replace(/\D/g, ""), 10) || (item.status_power === 1 || item.status_power === "ON" ? 100 : 0);
-        const location = item.latitude && item.longitude && Number(item.latitude) !== 0 && Number(item.longitude) !== 0
-          ? `${parseFloat(item.latitude).toFixed(6)}, ${parseFloat(item.longitude).toFixed(6)}`
-          : item.device_name || "Unknown Location";
-
-        return {
-          id: item.device_id || item.name || item.id || `SL-${Math.random().toString(36).substr(2, 9)}`,
-          name: item.device_name || item.name || "Unknown Streetlight",
-          location,
-          status,
-          brightness: Math.min(100, Math.max(0, brightnessNum)),
-          lastUpdate: item.date_updated || item.modified || new Date().toISOString(),
-          device_id: item.device_id ?? item.name,
-          device_name: item.device_name,
-          device_status: item.device_status,
-          status_power: item.status_power != null ? String(item.status_power) : undefined,
-          dim_value: item.dim_value,
-          latitude: item.latitude,
-          longitude: item.longitude,
-        };
-      });
-      
-      // Store in frontend cache
-      cacheRef.current.set(cacheKey, {
-        data: mappedStreetlights,
-        timestamp: now,
-      });
-      
-      setStreetlights(mappedStreetlights);
-      setLastRefresh(new Date());
-      console.log(`[SUCCESS] Loaded ${mappedStreetlights.length} streetlights`);
-    } catch (err: any) {
-      console.error('Error fetching streetlight data:', err);
-      setError(err.message || 'Failed to load streetlight data');
-      
-      // Fallback to cached data if available
-      const cached = cacheRef.current.get('all_streetlights');
-      if (cached) {
-        console.log('[FALLBACK] Using cached streetlight data');
-        setStreetlights(cached.data);
-        setLastRefresh(new Date(cached.timestamp));
-      }
-    } finally {
-      setIsLoading(false);
-    }
+  // Dummy data: refresh just updates "last refresh" time
+  const refreshDummy = () => {
+    setLastRefresh(new Date());
   };
-
-  // Initial fetch and set up auto-refresh
-  useEffect(() => {
-    fetchStreetlightStatus();
-    
-    // Auto-refresh every 15 minutes
-    const interval = setInterval(() => {
-      fetchStreetlightStatus(true); // Force refresh after 15 minutes
-    }, CACHE_TTL);
-
-    return () => clearInterval(interval);
-  }, []);
 
   const onlineCount = streetlights.filter(s => s.status === "online").length;
   const offlineCount = streetlights.filter(s => s.status === "offline").length;
@@ -338,29 +253,20 @@ export default function StreetlightStatus({
             </CardTitle>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => fetchStreetlightStatus(true)}
-                disabled={isLoading}
-                className="p-1 hover:bg-white/10 rounded transition-colors disabled:opacity-50"
+                onClick={refreshDummy}
+                className="p-1 hover:bg-white/10 rounded transition-colors"
                 title="Refresh"
               >
-                <RefreshCw className={`h-4 w-4 text-white/70 ${isLoading ? 'animate-spin' : ''}`} />
+                <RefreshCw className="h-4 w-4 text-white/70" />
               </button>
               <div className="flex items-center gap-1 text-xs text-white/70">
-                <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-yellow-400' : 'bg-green-400'} ${!isLoading ? 'animate-pulse' : ''}`}></span>
-                {isLoading ? 'Loading...' : 'Live'}
+                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                Dummy data
               </div>
             </div>
           </div>
         </CardHeader>
         <CardContent className="pt-4 flex-1 overflow-y-auto max-h-[600px]">
-          {/* Error Message */}
-          {error && (
-            <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-red-400" />
-              <p className="text-sm text-red-400">{error}</p>
-            </div>
-          )}
-
           {/* Summary Stats */}
           <div className={`grid gap-2 mb-4 ${isCompact ? "grid-cols-3" : isWide ? "grid-cols-3" : "grid-cols-3"}`}>
             <div className="bg-white/5 rounded-lg p-2 text-center">
@@ -387,14 +293,7 @@ export default function StreetlightStatus({
           </div>
 
           {/* Streetlight List */}
-          {isLoading && streetlights.length === 0 ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="flex flex-col items-center gap-2">
-                <RefreshCw className="h-6 w-6 text-white/50 animate-spin" />
-                <p className="text-sm text-white/70">Loading streetlights...</p>
-              </div>
-            </div>
-          ) : streetlights.length === 0 ? (
+          {streetlights.length === 0 ? (
             <div className="flex items-center justify-center py-8">
               <p className="text-sm text-white/70">No streetlight data available</p>
             </div>
@@ -475,31 +374,23 @@ export default function StreetlightStatus({
               {isCompact && "Streetlights"}
             </CardTitle>
             <div className="flex items-center gap-2">
-              <button onClick={() => fetchStreetlightStatus(true)} disabled={isLoading} className="p-1 hover:bg-white/10 rounded transition-colors disabled:opacity-50" title="Refresh">
-                <RefreshCw className={`h-4 w-4 text-white/70 ${isLoading ? "animate-spin" : ""}`} />
+              <button onClick={refreshDummy} className="p-1 hover:bg-white/10 rounded transition-colors" title="Refresh">
+                <RefreshCw className="h-4 w-4 text-white/70" />
               </button>
               <div className="flex items-center gap-1 text-xs text-white/70">
-                <span className={`w-2 h-2 rounded-full ${isLoading ? "bg-yellow-400" : "bg-green-400"} ${!isLoading ? "animate-pulse" : ""}`}></span>
-                {isLoading ? "Loading..." : "Live"}
+                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                Dummy data
               </div>
             </div>
           </div>
         </CardHeader>
         <CardContent className="pt-4 flex-1 overflow-y-auto max-h-[600px]">
-          {error && (
-            <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-red-400" />
-              <p className="text-sm text-red-400">{error}</p>
-            </div>
-          )}
           <div className={`grid gap-2 mb-4 ${isCompact ? "grid-cols-3" : "grid-cols-3"}`}>
             <div className="bg-white/5 rounded-lg p-2 text-center"><div className={`flex items-center justify-center gap-1 mb-1 ${isCompact ? "flex-col" : ""}`}><CheckCircle2 className={`text-green-400 ${isCompact ? "h-3 w-3" : "h-4 w-4"}`} /><span className={`font-bold text-white ${isCompact ? "text-lg" : "text-2xl"}`}>{onlineCount}</span></div><p className={`text-white/70 ${isCompact ? "text-[10px]" : "text-xs"}`}>Online</p></div>
             <div className="bg-white/5 rounded-lg p-2 text-center"><div className={`flex items-center justify-center gap-1 mb-1 ${isCompact ? "flex-col" : ""}`}><LightbulbOff className={`text-red-400 ${isCompact ? "h-3 w-3" : "h-4 w-4"}`} /><span className={`font-bold text-white ${isCompact ? "text-lg" : "text-2xl"}`}>{offlineCount}</span></div><p className={`text-white/70 ${isCompact ? "text-[10px]" : "text-xs"}`}>Offline</p></div>
             <div className="bg-white/5 rounded-lg p-2 text-center"><div className={`flex items-center justify-center gap-1 mb-1 ${isCompact ? "flex-col" : ""}`}><AlertCircle className={`text-yellow-400 ${isCompact ? "h-3 w-3" : "h-4 w-4"}`} /><span className={`font-bold text-white ${isCompact ? "text-lg" : "text-2xl"}`}>{maintenanceCount}</span></div><p className={`text-white/70 ${isCompact ? "text-[10px]" : "text-xs"}`}>Maintenance</p></div>
           </div>
-          {isLoading && streetlights.length === 0 ? (
-            <div className="flex items-center justify-center py-8"><RefreshCw className="h-6 w-6 text-white/50 animate-spin" /><p className="text-sm text-white/70">Loading streetlights...</p></div>
-          ) : streetlights.length === 0 ? (
+          {streetlights.length === 0 ? (
             <div className="flex items-center justify-center py-8"><p className="text-sm text-white/70">No streetlight data available</p></div>
           ) : (
             <div className="space-y-2">

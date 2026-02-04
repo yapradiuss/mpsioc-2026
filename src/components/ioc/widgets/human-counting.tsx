@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Users, TrendingUp, Maximize2, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,8 +15,37 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-// Use relative URL so Next.js rewrites proxy to backend (avoids CORS and wrong port)
-const HUMAN_COUNTING_API = "/api/human-counting";
+// Dummy data: last 7 days human counts per location (no API)
+const DUMMY_LOCATIONS: Location[] = [
+  { id: "C01", name: "C01 - IOC Tengah" },
+  { id: "C02", name: "C02 - IOC Pintu Depan" },
+  { id: "C03", name: "C03 - IOC Kiri" },
+  { id: "C04", name: "C04 - IOC Belakang" },
+  { id: "C05", name: "C05 - IOC Luar" },
+  { id: "C06", name: "C06 - IOC Server" },
+];
+
+function getLast7Days(): string[] {
+  const days: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+function buildDummyHumanChartData(): ChartDataPoint[] {
+  const dates = getLast7Days();
+  const locationIds = DUMMY_LOCATIONS.map((l) => l.id);
+  return dates.map((date) => {
+    const row: ChartDataPoint = { date };
+    locationIds.forEach((id, i) => {
+      row[id] = 80 + Math.floor(Math.random() * 120) + (i + 1) * 15;
+    });
+    return row;
+  });
+}
 
 interface HumanCountingProps {
   initialPosition?: { x: number; y: number };
@@ -66,12 +95,11 @@ export default function HumanCounting({
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [totalCount, setTotalCount] = useState(0);
-  const abortRef = useRef<AbortController | null>(null);
+  const [chartData, setChartData] = useState<ChartDataPoint[]>(() => buildDummyHumanChartData());
+  const [locations] = useState<Location[]>(DUMMY_LOCATIONS);
+  const totalCount = chartData.reduce((sum, day) => {
+    return sum + DUMMY_LOCATIONS.reduce((s, loc) => s + Number(day[loc.id] ?? 0), 0);
+  }, 0);
 
   const MIN_WIDTH = 400;
   const MAX_WIDTH = 1200;
@@ -92,72 +120,7 @@ export default function HumanCounting({
     }
   }, [disableInternalPositioning, initialSize?.width, initialSize?.height]);
 
-  // Fetch human counting data (only show loading on first load)
-  const fetchData = useCallback(async (showLoading = true) => {
-    if (abortRef.current) abortRef.current.abort();
-    abortRef.current = new AbortController();
-    const signal = abortRef.current.signal;
-
-    try {
-      if (showLoading) setIsLoading(true);
-      setError(null);
-
-      const response = await fetch(`${HUMAN_COUNTING_API}/last-7-days`, { signal });
-      let data: { success?: boolean; data?: { chartData?: unknown[]; locations?: Location[] }; message?: string; error?: string } = {};
-      try {
-        const text = await response.text();
-        if (text) data = JSON.parse(text);
-      } catch {
-        throw new Error("Invalid response from server");
-      }
-
-      if (!response.ok) {
-        const msg = data?.message || data?.error || `Failed to fetch (${response.status})`;
-        throw new Error(msg);
-      }
-
-      const payload = data?.data;
-      const raw = Array.isArray(payload?.chartData) ? payload.chartData : [];
-      const locs = Array.isArray(payload?.locations) ? payload.locations : [];
-      const fallbackLocs: Location[] = [
-        { id: "C01", name: "C01 - IOC Tengah" }, { id: "C02", name: "C02 - IOC Pintu Depan" },
-        { id: "C03", name: "C03 - IOC Kiri" }, { id: "C04", name: "C04 - IOC Belakang" },
-        { id: "C05", name: "C05 - IOC Luar" }, { id: "C06", name: "C06 - IOC Server" },
-      ];
-      const locationsToUse = locs.length ? locs : fallbackLocs;
-      const locationIds = locationsToUse.map((l: Location) => l.id);
-
-      const chart: ChartDataPoint[] = raw.map((day: unknown) => {
-        const d = day as Record<string, unknown>;
-        const row: ChartDataPoint = { date: String(d.date ?? "") };
-        locationIds.forEach((id) => {
-          row[id] = Number(d[id] ?? 0);
-        });
-        return row;
-      });
-      setChartData(chart);
-      setLocations(locationsToUse);
-      const total = chart.reduce((sum, day) => {
-        return sum + locationIds.reduce((s, id) => s + Number(day[id] ?? 0), 0);
-      }, 0);
-      setTotalCount(total);
-    } catch (err: any) {
-      if (err.name === "AbortError") return;
-      console.error("Error fetching human counting data:", err);
-      setError(err.message || "Failed to load human counting data");
-    } finally {
-      if (showLoading) setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData(true);
-    const interval = setInterval(() => fetchData(false), 5 * 60 * 1000);
-    return () => {
-      clearInterval(interval);
-      if (abortRef.current) abortRef.current.abort();
-    };
-  }, [fetchData]);
+  const refreshDummy = () => setChartData(buildDummyHumanChartData());
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (disableInternalPositioning) return;
@@ -328,11 +291,11 @@ export default function HumanCounting({
                 Last 7 Days
               </Badge>
               <button
-                onClick={() => fetchData()}
+                onClick={refreshDummy}
                 className="p-1 hover:bg-white/10 rounded transition-colors"
                 title="Refresh data"
               >
-                <RefreshCw className={`h-4 w-4 text-white/70 ${isLoading ? "animate-spin" : ""}`} />
+                <RefreshCw className="h-4 w-4 text-white/70" />
               </button>
             </div>
           </div>
@@ -364,15 +327,7 @@ export default function HumanCounting({
 
           {/* Line Chart - fills remaining space */}
           <div className="flex-1 min-h-0 flex flex-col">
-            {isLoading ? (
-              <div className="flex items-center justify-center flex-1 min-h-[200px]">
-                <RefreshCw className="h-8 w-8 text-pink-400 animate-spin" />
-              </div>
-            ) : error ? (
-              <div className="flex items-center justify-center flex-1 min-h-[200px] text-red-400 text-sm">
-                <p>{error}</p>
-              </div>
-            ) : !chartData.length ? (
+            {!chartData.length ? (
               <div className="flex flex-col items-center justify-center flex-1 min-h-[200px] text-white/60 gap-2 text-sm">
                 <Users className="h-10 w-10 text-pink-400/60" />
                 <p>No human data for last 7 days</p>

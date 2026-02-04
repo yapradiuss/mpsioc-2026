@@ -11,12 +11,25 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Lock, AlertCircle } from "lucide-react";
 import { logActivity } from "@/lib/audit-logger";
 import { isAuthenticated } from "@/lib/auth";
-import { API_BASE_URL } from "@/lib/api";
+import type { User } from "@/lib/auth";
+
+// Hardcoded login (no API). Change in production to use real auth.
+const HARDCODED_EMAIL = "superadmin@mpsepang.gov.my";
+const HARDCODED_PASSWORD = "123456";
+const HARDCODED_USER: User = {
+  id: 1,
+  username: "superadmin",
+  email: HARDCODED_EMAIL,
+  full_name: "Super Administrator",
+  role: "admin",
+  status: "active",
+  pages: ["/admin", "/admin/users", "/admin/audit-trail", "/admin/news-ticker", "/admin/live-cctv-feed"],
+};
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,66 +45,48 @@ function LoginForm() {
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
-    
+
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || data.error || `Login failed: ${response.status}`);
+      // Hardcoded login (no API)
+      if (email.trim().toLowerCase() !== HARDCODED_EMAIL.toLowerCase() || password !== HARDCODED_PASSWORD) {
+        setError('Invalid email or password.');
+        if (email) {
+          logActivity({
+            action: 'LOGIN',
+            category: 'SECURITY',
+            resource: 'Authentication',
+            description: `Failed login attempt: ${email}`,
+            status: 'FAILED',
+          });
+        }
+        return;
       }
 
-      const data = await response.json();
-      
-      if (!data.success) {
-        throw new Error(data.message || 'Login failed');
-      }
-
-      // Store auth data
-      localStorage.setItem('user', JSON.stringify(data.user));
-      const token = data.token || 'authenticated';
+      const token = 'authenticated';
+      localStorage.setItem('user', JSON.stringify(HARDCODED_USER));
       localStorage.setItem('token', token);
       document.cookie = `auth_token=${token}; path=/; max-age=${604800}; SameSite=Lax`;
-      
-      // Notify other components
+
       window.dispatchEvent(new Event('userUpdated'));
-      
-      // Log activity (non-blocking)
+
       logActivity({
         action: 'LOGIN',
         category: 'SECURITY',
         resource: 'Authentication',
-        description: `User logged in: ${data.user.username}`,
+        description: `User logged in: ${HARDCODED_USER.email}`,
         status: 'SUCCESS',
       });
 
-      // Redirect
       router.push(searchParams.get('redirect') || '/admin');
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to login. Please check your credentials.';
-      setError(errorMessage);
-      
-      // Log failed attempt (non-blocking)
-      if (username) {
-        logActivity({
-          action: 'LOGIN',
-          category: 'SECURITY',
-          resource: 'Authentication',
-          description: `Failed login attempt: ${username}`,
-          status: 'FAILED',
-        });
-      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to login.');
     } finally {
       setIsLoading(false);
     }
-  }, [username, password, isLoading, router, searchParams]);
+  }, [email, password, isLoading, router, searchParams]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative bg-cover bg-center bg-no-repeat bg-[url('/MPsepang_a.jpg.png')]">
@@ -122,20 +117,20 @@ function LoginForm() {
             )}
             
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="email">Email</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
-                  id="username"
-                  type="text"
-                  placeholder="Enter your username"
+                  id="email"
+                  type="email"
+                  placeholder="Enter your email"
                   className="pl-9"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={isLoading}
                   autoFocus
-                  autoComplete="username"
+                  autoComplete="email"
                 />
               </div>
             </div>

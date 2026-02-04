@@ -62,20 +62,13 @@ const EmojiPicker = dynamic(
   () => import('emoji-picker-react'),
   { ssr: false }
 );
-import { API_BASE_URL } from "@/lib/api";
+import {
+  getNewsTickerItems,
+  setNewsTickerItems,
+  type NewsTickerItem,
+} from "@/lib/news-ticker-storage";
 
-interface NewsTicker {
-  id: number;
-  title: string;
-  content: string;
-  status: string;
-  priority: number;
-  start_date: string | null;
-  end_date: string | null;
-  created_at: string;
-  updated_at: string;
-  created_by_name?: string;
-}
+type NewsTicker = NewsTickerItem;
 
 interface NewsTickerFormData {
   title: string;
@@ -114,41 +107,22 @@ export default function NewsTickerPage() {
     logPageView('/admin/news-ticker', 'News Ticker Management');
   }, []);
 
-  // Fetch news ticker items
-  const fetchNewsTicker = useCallback(async () => {
+  // Load news ticker from localStorage (no API)
+  const loadFromStorage = useCallback(() => {
     setIsLoading(true);
     setError(null);
-
     try {
-      const params = new URLSearchParams();
-      if (statusFilter !== 'all') params.append('status', statusFilter);
-      params.append('page', '1');
-      params.append('limit', '100');
-      params.append('sortBy', 'created_at');
-      params.append('sortOrder', 'DESC');
-
-      const response = await fetch(`${API_BASE_URL}/api/news-ticker?${params.toString()}`);
-      
-      let data;
-      try {
-        data = await response.json();
-      } catch (parseError) {
-        throw new Error(`Failed to fetch news ticker: ${response.status} ${response.statusText}`);
-      }
-
-      if (!response.ok) {
-        const errorMessage = data.message || data.error || `Failed to fetch news ticker: ${response.status}`;
-        throw new Error(errorMessage);
-      }
-
-      if (data.success) {
-        setNewsItems(data.data);
-      } else {
-        throw new Error(data.message || 'Failed to fetch news ticker');
-      }
+      const items = getNewsTickerItems();
+      const sorted = [...items].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      const filtered =
+        statusFilter === "all"
+          ? sorted
+          : sorted.filter((item) => item.status === statusFilter);
+      setNewsItems(filtered);
     } catch (err: any) {
-      console.error('Error fetching news ticker:', err);
-      setError(err.message || 'Failed to load news ticker items');
+      setError(err.message || "Failed to load news ticker items");
       setNewsItems([]);
     } finally {
       setIsLoading(false);
@@ -156,8 +130,8 @@ export default function NewsTickerPage() {
   }, [statusFilter]);
 
   useEffect(() => {
-    fetchNewsTicker();
-  }, [fetchNewsTicker]);
+    loadFromStorage();
+  }, [loadFromStorage]);
 
   const handleOpenCreateDialog = () => {
     setIsEditMode(false);
@@ -199,71 +173,59 @@ export default function NewsTickerPage() {
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+    const user = getCurrentUser();
+    const priority = parseInt(formData.priority.toString(), 10) || 0;
+    const now = new Date().toISOString();
+
     try {
-      const user = getCurrentUser();
-      const payload: any = {
-        ...formData,
-        priority: parseInt(formData.priority.toString(), 10),
-        start_date: formData.start_date || null,
-        end_date: formData.end_date || null,
-      };
-
-      if (user?.id) {
-        payload.created_by = user.id;
+      const items = getNewsTickerItems();
+      if (isEditMode && editingId !== null) {
+        const index = items.findIndex((item) => item.id === editingId);
+        if (index >= 0) {
+          items[index] = {
+            ...items[index],
+            title: formData.title,
+            content: formData.content,
+            status: formData.status,
+            priority,
+            start_date: formData.start_date || null,
+            end_date: formData.end_date || null,
+            updated_at: now,
+          };
+        }
+      } else {
+        const newId = items.length > 0 ? Math.max(...items.map((i) => i.id)) + 1 : 1;
+        items.unshift({
+          id: newId,
+          title: formData.title,
+          content: formData.content,
+          status: formData.status,
+          priority,
+          start_date: formData.start_date || null,
+          end_date: formData.end_date || null,
+          created_at: now,
+          updated_at: now,
+          created_by_name: user?.full_name || user?.email,
+        });
       }
-
-      const url = isEditMode
-        ? `${API_BASE_URL}/api/news-ticker/${editingId}`
-        : `${API_BASE_URL}/api/news-ticker`;
-      
-      const method = isEditMode ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to save news ticker item');
-      }
-
-      // Refresh news ticker list
-      await fetchNewsTicker();
+      setNewsTickerItems(items);
+      loadFromStorage();
       handleCloseDialog();
     } catch (err: any) {
-      console.error('Error saving news ticker item:', err);
-      setError(err.message || 'Failed to save news ticker item');
+      setError(err.message || "Failed to save news ticker item");
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this news ticker item?')) {
-      return;
-    }
-
+  const handleDelete = (id: number) => {
+    if (!confirm("Are you sure you want to delete this news ticker item?")) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/news-ticker/${id}`, {
-        method: 'DELETE',
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to delete news ticker item');
-      }
-
-      await fetchNewsTicker();
+      const items = getNewsTickerItems().filter((item) => item.id !== id);
+      setNewsTickerItems(items);
+      loadFromStorage();
     } catch (err: any) {
-      console.error('Error deleting news ticker item:', err);
-      setError(err.message || 'Failed to delete news ticker item');
+      setError(err.message || "Failed to delete news ticker item");
     }
   };
 

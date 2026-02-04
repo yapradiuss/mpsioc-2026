@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -21,9 +21,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Search, FileText, Shield, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Search, FileText, Shield, ChevronLeft, ChevronRight } from "lucide-react";
 import { logPageView } from "@/lib/audit-logger";
-import { API_BASE_URL } from "@/lib/api";
 
 type ActionType = 
   | "CREATE" 
@@ -53,17 +52,6 @@ interface AuditLog {
   metadata?: any;
 }
 
-interface AuditLogsResponse {
-  success: boolean;
-  data: AuditLog[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-}
-
 interface AuditStats {
   total: number;
   success: number;
@@ -77,6 +65,54 @@ const categoryColors: Record<ActionCategory, string> = {
   SECURITY: "bg-red-100 text-red-800",
   DATA: "bg-green-100 text-green-800",
 };
+
+// Dummy audit trail data (no API)
+const LIMIT = 50;
+const DUMMY_AUDIT_LOGS: AuditLog[] = (() => {
+  const actions: ActionType[] = ["CREATE", "UPDATE", "DELETE", "VIEW", "LOGIN", "LOGOUT", "PERMISSION_CHANGE", "SETTINGS_CHANGE"];
+  const categories: ActionCategory[] = ["USER", "SYSTEM", "SECURITY", "DATA"];
+  const users = [
+    { name: "Super Administrator", email: "superadmin@mpsepang.gov.my" },
+    { name: "Admin User", email: "admin@mpsepang.gov.my" },
+    { name: "Operator One", email: "operator1@mpsepang.gov.my" },
+    { name: "Operator Two", email: "operator2@mpsepang.gov.my" },
+  ];
+  const resources = ["Users", "Audit Trail", "News Ticker", "CCTV Feed", "Settings", "Authentication", "Permissions"];
+  const descriptions = [
+    "User logged in successfully",
+    "User logged out",
+    "Viewed audit trail page",
+    "Updated user permissions",
+    "Created new news ticker item",
+    "Deleted news ticker entry",
+    "Viewed live CCTV feed",
+    "Failed login attempt",
+    "Settings updated",
+    "Page view recorded",
+  ];
+  const logs: AuditLog[] = [];
+  const now = Date.now();
+  for (let i = 0; i < 120; i++) {
+    const user = users[i % users.length];
+    const action = actions[i % actions.length];
+    const category = categories[i % categories.length];
+    const status: "SUCCESS" | "FAILED" = i % 10 === 7 ? "FAILED" : "SUCCESS";
+    logs.push({
+      id: i + 1,
+      timestamp: new Date(now - i * 60000 * (1 + (i % 5))).toISOString(),
+      user_name: user.name,
+      user_email: user.email,
+      action,
+      category,
+      resource: resources[i % resources.length],
+      description: descriptions[i % descriptions.length],
+      ip_address: `192.168.1.${(i % 255)}`,
+      status,
+      metadata: {},
+    });
+  }
+  return logs;
+})();
 
 // Memoized helper functions
 const getInitials = (name?: string, email?: string): string => {
@@ -110,191 +146,73 @@ const formatTimestamp = (timestamp: string): string => {
 };
 
 export default function AuditTrailPage() {
-  const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [stats, setStats] = useState<AuditStats>({
-    total: 0,
-    success: 0,
-    failed: 0,
-    security: 0,
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingStats, setIsLoadingStats] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 50,
-    total: 0,
-    totalPages: 0,
-  });
-
-  // Request cancellation
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const statsAbortControllerRef = useRef<AbortController | null>(null);
 
   // Debounce search query
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchQuery(searchQuery);
-    }, 300);
-
+    const timer = setTimeout(() => setDebouncedSearchQuery(searchQuery), 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Log page view once
   useEffect(() => {
     logPageView('/admin/audit-trail', 'Audit Trail');
   }, []);
 
-  // Fetch audit logs with cancellation support
-  const fetchLogs = useCallback(async () => {
-    // Cancel previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    // Create new abort controller
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        limit: '50',
-      });
-
-      if (debouncedSearchQuery) params.append('search', debouncedSearchQuery);
-      if (actionFilter !== 'all') params.append('action', actionFilter);
-      if (categoryFilter !== 'all') params.append('category', categoryFilter);
-      if (statusFilter !== 'all') params.append('status', statusFilter);
-
-      const response = await fetch(`${API_BASE_URL}/api/audit-trail?${params.toString()}`, {
-        signal,
-      });
-      
-      // Check if request was aborted
-      if (signal.aborted) return;
-
-      let data;
-      try {
-        data = await response.json();
-      } catch (parseError) {
-        if (signal.aborted) return;
-        throw new Error(`Failed to fetch audit logs: ${response.status} ${response.statusText}`);
-      }
-      
-      if (signal.aborted) return;
-
-      if (!response.ok) {
-        const errorMessage = data.message || data.error || `Failed to fetch audit logs: ${response.status}`;
-        const hint = data.hint ? `\n\nHint: ${data.hint}` : '';
-        throw new Error(errorMessage + hint);
-      }
-      
-      if (data.success) {
-        setLogs(data.data);
-        setPagination(data.pagination);
-      } else {
-        throw new Error(data.message || 'Failed to fetch audit logs');
-      }
-    } catch (err: any) {
-      // Ignore abort errors
-      if (err.name === 'AbortError') return;
-      
-      setError(err.message || 'Failed to load audit logs');
-      setLogs([]);
-    } finally {
-      if (!signal.aborted) {
-        setIsLoading(false);
-      }
-    }
-  }, [currentPage, debouncedSearchQuery, actionFilter, categoryFilter, statusFilter]);
-
-  // Fetch stats with cancellation support
-  const fetchStats = useCallback(async () => {
-    // Cancel previous request
-    if (statsAbortControllerRef.current) {
-      statsAbortControllerRef.current.abort();
-    }
-
-    statsAbortControllerRef.current = new AbortController();
-    const signal = statsAbortControllerRef.current.signal;
-
-    setIsLoadingStats(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/audit-trail/stats`, {
-        signal,
-      });
-      
-      if (signal.aborted) return;
-
-      const data = await response.json();
-      
-      if (signal.aborted) return;
-
-      if (!response.ok) {
-        return;
-      }
-      
-      if (data.success) {
-        setStats(data.data);
-      }
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        // Silently fail for stats
-      }
-    } finally {
-      if (!signal.aborted) {
-        setIsLoadingStats(false);
-      }
-    }
+  // Stats from dummy data (no API)
+  const stats = useMemo((): AuditStats => {
+    const total = DUMMY_AUDIT_LOGS.length;
+    const success = DUMMY_AUDIT_LOGS.filter((l) => l.status === "SUCCESS").length;
+    const failed = DUMMY_AUDIT_LOGS.filter((l) => l.status === "FAILED").length;
+    const security = DUMMY_AUDIT_LOGS.filter((l) => l.category === "SECURITY").length;
+    return { total, success, failed, security };
   }, []);
 
-  // Fetch data when filters change
-  useEffect(() => {
-    fetchLogs();
-    
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, [fetchLogs]);
+  // Filter dummy data client-side
+  const filteredLogs = useMemo(() => {
+    let list = [...DUMMY_AUDIT_LOGS];
+    const q = debouncedSearchQuery.toLowerCase();
+    if (q) {
+      list = list.filter(
+        (l) =>
+          (l.user_name?.toLowerCase().includes(q)) ||
+          (l.user_email?.toLowerCase().includes(q)) ||
+          (l.resource?.toLowerCase().includes(q)) ||
+          (l.description?.toLowerCase().includes(q)) ||
+          (l.ip_address?.toLowerCase().includes(q))
+      );
+    }
+    if (actionFilter !== "all") list = list.filter((l) => l.action === actionFilter);
+    if (categoryFilter !== "all") list = list.filter((l) => l.category === categoryFilter);
+    if (statusFilter !== "all") list = list.filter((l) => l.status === statusFilter);
+    return list;
+  }, [debouncedSearchQuery, actionFilter, categoryFilter, statusFilter]);
 
-  // Fetch stats on mount
-  useEffect(() => {
-    fetchStats();
-    
-    return () => {
-      if (statsAbortControllerRef.current) {
-        statsAbortControllerRef.current.abort();
-      }
-    };
-  }, [fetchStats]);
+  const totalFiltered = filteredLogs.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / LIMIT));
+  const page = Math.max(1, Math.min(currentPage, totalPages));
+  const paginatedLogs = useMemo(
+    () => filteredLogs.slice((page - 1) * LIMIT, page * LIMIT),
+    [filteredLogs, page]
+  );
+
+  const paginationInfo = useMemo(() => {
+    const start = totalFiltered === 0 ? 0 : (page - 1) * LIMIT + 1;
+    const end = Math.min(page * LIMIT, totalFiltered);
+    return { start, end, total: totalFiltered };
+  }, [page, totalFiltered]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearchQuery, actionFilter, categoryFilter, statusFilter]);
 
-  // Memoized filtered logs count
-  const paginationInfo = useMemo(() => {
-    const start = ((pagination.page - 1) * pagination.limit) + 1;
-    const end = Math.min(pagination.page * pagination.limit, pagination.total);
-    return { start, end, total: pagination.total };
-  }, [pagination]);
-
-  // Memoized table rows
   const tableRows = useMemo(() => {
-    return logs.map((log) => (
+    return paginatedLogs.map((log) => (
       <TableRow key={log.id}>
         <TableCell className="font-mono text-sm">
           {formatTimestamp(log.timestamp)}
@@ -349,16 +267,10 @@ export default function AuditTrailPage() {
         </TableCell>
       </TableRow>
     ));
-  }, [logs]);
+  }, [paginatedLogs]);
 
-  // Memoized pagination handlers
-  const handlePreviousPage = useCallback(() => {
-    setCurrentPage(prev => Math.max(1, prev - 1));
-  }, []);
-
-  const handleNextPage = useCallback(() => {
-    setCurrentPage(prev => Math.min(pagination.totalPages, prev + 1));
-  }, [pagination.totalPages]);
+  const handlePreviousPage = () => setCurrentPage((prev) => Math.max(1, prev - 1));
+  const handleNextPage = () => setCurrentPage((prev) => Math.min(totalPages, prev + 1));
 
   return (
     <div className="space-y-6">
@@ -377,16 +289,8 @@ export default function AuditTrailPage() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {isLoadingStats ? (
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{stats.total}</div>
-                <p className="text-xs text-muted-foreground">
-                  All audit entries
-                </p>
-              </>
-            )}
+            <div className="text-2xl font-bold">{stats.total}</div>
+            <p className="text-xs text-muted-foreground">All audit entries</p>
           </CardContent>
         </Card>
         <Card>
@@ -395,16 +299,8 @@ export default function AuditTrailPage() {
             <Shield className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            {isLoadingStats ? (
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold text-green-600">{stats.success}</div>
-                <p className="text-xs text-muted-foreground">
-                  Successful actions
-                </p>
-              </>
-            )}
+            <div className="text-2xl font-bold text-green-600">{stats.success}</div>
+            <p className="text-xs text-muted-foreground">Successful actions</p>
           </CardContent>
         </Card>
         <Card>
@@ -413,16 +309,8 @@ export default function AuditTrailPage() {
             <Shield className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            {isLoadingStats ? (
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold text-red-600">{stats.failed}</div>
-                <p className="text-xs text-muted-foreground">
-                  Failed attempts
-                </p>
-              </>
-            )}
+            <div className="text-2xl font-bold text-red-600">{stats.failed}</div>
+            <p className="text-xs text-muted-foreground">Failed attempts</p>
           </CardContent>
         </Card>
         <Card>
@@ -431,16 +319,8 @@ export default function AuditTrailPage() {
             <Shield className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {isLoadingStats ? (
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{stats.security}</div>
-                <p className="text-xs text-muted-foreground">
-                  Security-related actions
-                </p>
-              </>
-            )}
+            <div className="text-2xl font-bold">{stats.security}</div>
+            <p className="text-xs text-muted-foreground">Security-related actions</p>
           </CardContent>
         </Card>
       </div>
@@ -507,11 +387,6 @@ export default function AuditTrailPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {error && (
-            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md text-red-800">
-              {error}
-            </div>
-          )}
           <div className="rounded-md border">
             <Table>
               <TableHeader>
@@ -526,27 +401,20 @@ export default function AuditTrailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-                    </TableCell>
-                  </TableRow>
-                ) : logs.length > 0 ? (
+                {paginatedLogs.length > 0 ? (
                   tableRows
                 ) : (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      {error ? 'Failed to load audit logs' : 'No audit logs found matching your filters.'}
+                      No audit logs found matching your filters.
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
-          
-          {/* Pagination */}
-          {!isLoading && logs.length > 0 && pagination.totalPages > 1 && (
+
+          {totalFiltered > 0 && totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
               <div className="text-sm text-muted-foreground">
                 Showing {paginationInfo.start} to {paginationInfo.end} of {paginationInfo.total} entries
@@ -556,19 +424,19 @@ export default function AuditTrailPage() {
                   variant="outline"
                   size="sm"
                   onClick={handlePreviousPage}
-                  disabled={currentPage === 1}
+                  disabled={page === 1}
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Previous
                 </Button>
                 <div className="text-sm text-muted-foreground">
-                  Page {pagination.page} of {pagination.totalPages}
+                  Page {page} of {totalPages}
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleNextPage}
-                  disabled={currentPage === pagination.totalPages}
+                  disabled={page === totalPages}
                 >
                   Next
                   <ChevronRight className="h-4 w-4" />

@@ -39,19 +39,9 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { 
-  MoreHorizontal, 
-  UserPlus, 
-  Search, 
-  Edit, 
-  Trash2,
-  Loader2,
-  Shield,
-  Eye,
-} from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { MoreHorizontal, UserPlus, Search, Edit, Trash2, Eye } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
 import { logPageView } from "@/lib/audit-logger";
-import { API_BASE_URL } from "@/lib/api";
 
 interface Page {
   id: number;
@@ -76,6 +66,56 @@ interface User {
   page_count?: number;
   pages?: Page[];
 }
+
+// Dummy pages (no API)
+const DUMMY_PAGES: Page[] = [
+  { id: 1, page_path: "/admin", page_name: "Dashboard", page_group: "Admin", description: "Admin home" },
+  { id: 2, page_path: "/admin/users", page_name: "User Management", page_group: "Admin", description: "Manage users" },
+  { id: 3, page_path: "/admin/audit-trail", page_name: "Audit Trail", page_group: "Admin", description: "Activity logs" },
+  { id: 4, page_path: "/admin/news-ticker", page_name: "News Ticker", page_group: "Admin", description: "News items" },
+  { id: 5, page_path: "/admin/live-cctv-feed", page_name: "Live CCTV Feed", page_group: "Admin", description: "CCTV cameras" },
+];
+
+// Dummy users (no API)
+const now = new Date().toISOString();
+const DUMMY_USERS_INITIAL: User[] = [
+  {
+    id: 1,
+    username: "superadmin",
+    email: "superadmin@mpsepang.gov.my",
+    full_name: "Super Administrator",
+    role: "admin",
+    status: "active",
+    created_at: now,
+    updated_at: now,
+    page_count: 5,
+    pages: [...DUMMY_PAGES],
+  },
+  {
+    id: 2,
+    username: "manager1",
+    email: "manager@mpsepang.gov.my",
+    full_name: "Manager One",
+    role: "manager",
+    status: "active",
+    created_at: now,
+    updated_at: now,
+    page_count: 3,
+    pages: [DUMMY_PAGES[0], DUMMY_PAGES[1], DUMMY_PAGES[3]],
+  },
+  {
+    id: 3,
+    username: "operator1",
+    email: "operator@mpsepang.gov.my",
+    full_name: "Operator One",
+    role: "user",
+    status: "active",
+    created_at: now,
+    updated_at: now,
+    page_count: 2,
+    pages: [DUMMY_PAGES[0], DUMMY_PAGES[4]],
+  },
+];
 
 interface UserFormData {
   username: string;
@@ -103,116 +143,61 @@ const getInitials = (name?: string, username?: string): string => {
 };
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [pages, setPages] = useState<Page[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [users, setUsers] = useState<User[]>(() => [...DUMMY_USERS_INITIAL]);
+  const [pages] = useState<Page[]>(DUMMY_PAGES);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  
+
   // Dialog states
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [formData, setFormData] = useState<UserFormData>({
-    username: '',
-    email: '',
-    password: '',
-    full_name: '',
-    role: 'user',
-    status: 'active',
+    username: "",
+    email: "",
+    password: "",
+    full_name: "",
+    role: "user",
+    status: "active",
     page_ids: [],
   });
   const [selectedPages, setSelectedPages] = useState<number[]>([]);
 
-  // Log page view
   useEffect(() => {
-    logPageView('/admin/users', 'User Management');
+    logPageView("/admin/users", "User Management");
   }, []);
 
-  // Fetch users
-  const fetchUsers = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const params = new URLSearchParams();
-      if (searchQuery) params.append('search', searchQuery);
-      if (roleFilter !== 'all') params.append('role', roleFilter);
-      if (statusFilter !== 'all') params.append('status', statusFilter);
-
-      const response = await fetch(`${API_BASE_URL}/api/user-management/users?${params.toString()}`);
-      
-      let data;
-      try {
-        data = await response.json();
-      } catch (parseError) {
-        throw new Error(`Failed to fetch users: ${response.status} ${response.statusText}`);
-      }
-
-      if (!response.ok) {
-        const errorMessage = data.message || data.error || `Failed to fetch users: ${response.status}`;
-        const hint = data.hint ? `\n\nHint: ${data.hint}` : '';
-        throw new Error(errorMessage + hint);
-      }
-
-      if (data.success) {
-        setUsers(data.data);
-      } else {
-        throw new Error(data.message || 'Failed to fetch users');
-      }
-    } catch (err: any) {
-      console.error('Error fetching users:', err);
-      setError(err.message || 'Failed to load users');
-      setUsers([]);
-    } finally {
-      setIsLoading(false);
+  // Filter users client-side (no API)
+  const filteredUsers = useMemo(() => {
+    let list = users;
+    const q = searchQuery.toLowerCase();
+    if (q) {
+      list = list.filter(
+        (u) =>
+          u.username.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q) ||
+          (u.full_name?.toLowerCase().includes(q))
+      );
     }
-  }, [searchQuery, roleFilter, statusFilter]);
+    if (roleFilter !== "all") list = list.filter((u) => u.role === roleFilter);
+    if (statusFilter !== "all") list = list.filter((u) => u.status === statusFilter);
+    return list;
+  }, [users, searchQuery, roleFilter, statusFilter]);
 
-  // Fetch available pages
-  const fetchPages = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/user-management/pages`);
-      const data = await response.json();
-
-      if (data.success) {
-        setPages(data.data);
-      }
-    } catch (err: any) {
-      console.error('Error fetching pages:', err);
-    }
-  }, []);
-
-  // Fetch user details with pages
-  const fetchUserDetails = async (userId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/user-management/users/${userId}`);
-      const data = await response.json();
-
-      if (data.success) {
-        const user = data.data;
-        setFormData({
-          username: user.username,
-          email: user.email,
-          password: '', // Don't populate password
-          full_name: user.full_name || '',
-          role: user.role,
-          status: user.status,
-          page_ids: user.pages?.map((p: Page) => p.id) || [],
-        });
-        setSelectedPages(user.pages?.map((p: Page) => p.id) || []);
-      }
-    } catch (err: any) {
-      console.error('Error fetching user details:', err);
-    }
+  const loadUserIntoForm = (user: User) => {
+    setFormData({
+      username: user.username,
+      email: user.email,
+      password: "",
+      full_name: user.full_name || "",
+      role: user.role,
+      status: user.status,
+      page_ids: user.pages?.map((p) => p.id) || [],
+    });
+    setSelectedPages(user.pages?.map((p) => p.id) || []);
   };
-
-  useEffect(() => {
-    fetchUsers();
-    fetchPages();
-  }, [fetchUsers, fetchPages]);
 
   const handleOpenCreateDialog = () => {
     setIsEditMode(false);
@@ -230,11 +215,14 @@ export default function UsersPage() {
     setIsDialogOpen(true);
   };
 
-  const handleOpenEditDialog = async (userId: number) => {
-    setIsEditMode(true);
-    setEditingUserId(userId);
-    await fetchUserDetails(userId);
-    setIsDialogOpen(true);
+  const handleOpenEditDialog = (userId: number) => {
+    const user = users.find((u) => u.id === userId);
+    if (user) {
+      setIsEditMode(true);
+      setEditingUserId(userId);
+      loadUserIntoForm(user);
+      setIsDialogOpen(true);
+    }
   };
 
   const handleCloseDialog = () => {
@@ -259,77 +247,65 @@ export default function UsersPage() {
     );
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    try {
-      const payload = {
-        ...formData,
-        page_ids: selectedPages,
-      };
+    setError(null);
+    const userPages = pages.filter((p) => selectedPages.includes(p.id));
+    const updatedAt = new Date().toISOString();
 
-      // Omit password when empty in edit mode (avoid sending empty password)
-      const body =
-        isEditMode && !payload.password
-          ? (() => {
-              const { password: _p, ...rest } = payload;
-              return rest;
-            })()
-          : payload;
-
-      const url = isEditMode
-        ? `${API_BASE_URL}/api/user-management/users/${editingUserId}`
-        : `${API_BASE_URL}/api/user-management/users`;
-      
-      const method = isEditMode ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
+    if (isEditMode && editingUserId !== null) {
+      const existing = users.find((u) => u.id === editingUserId);
+      if (existing && formData.email !== existing.email && users.some((u) => u.id !== editingUserId && u.email === formData.email)) {
+        setError("Email already in use.");
+        return;
+      }
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === editingUserId
+            ? {
+                ...u,
+                username: formData.username,
+                email: formData.email,
+                full_name: formData.full_name || undefined,
+                role: formData.role,
+                status: formData.status,
+                updated_at: updatedAt,
+                pages: userPages,
+                page_count: userPages.length,
+              }
+            : u
+        )
+      );
+    } else {
+      if (users.some((u) => u.email === formData.email || u.username === formData.username)) {
+        setError("Username or email already in use.");
+        return;
+      }
+      const newId = users.length ? Math.max(...users.map((u) => u.id)) + 1 : 1;
+      setUsers((prev) => [
+        ...prev,
+        {
+          id: newId,
+          username: formData.username,
+          email: formData.email,
+          full_name: formData.full_name || undefined,
+          role: formData.role,
+          status: formData.status,
+          created_at: updatedAt,
+          updated_at: updatedAt,
+          pages: userPages,
+          page_count: userPages.length,
         },
-        body: JSON.stringify(body),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to save user');
-      }
-
-      // Refresh users list
-      await fetchUsers();
-      handleCloseDialog();
-    } catch (err: any) {
-      console.error('Error saving user:', err);
-      setError(err.message || 'Failed to save user');
+      ]);
     }
+    handleCloseDialog();
   };
 
-  const handleDelete = async (userId: number) => {
-    if (!confirm('Are you sure you want to delete this user?')) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/user-management/users/${userId}`, {
-        method: 'DELETE',
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to delete user');
-      }
-
-      await fetchUsers();
-    } catch (err: any) {
-      console.error('Error deleting user:', err);
-      setError(err.message || 'Failed to delete user');
-    }
+  const handleDelete = (userId: number) => {
+    if (!confirm("Are you sure you want to delete this user?")) return;
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    setError(null);
   };
-
-  const filteredUsers = users;
 
   // Group pages by page_group
   const groupedPages = pages.reduce((acc, page) => {
@@ -370,14 +346,8 @@ export default function UsersPage() {
             <CardTitle className="text-sm font-medium">Total Users</CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{stats.total}</div>
-                <p className="text-xs text-muted-foreground">Registered accounts</p>
-              </>
-            )}
+            <div className="text-2xl font-bold">{stats.total}</div>
+            <p className="text-xs text-muted-foreground">Registered accounts</p>
           </CardContent>
         </Card>
         <Card>
@@ -385,14 +355,8 @@ export default function UsersPage() {
             <CardTitle className="text-sm font-medium">Active Users</CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{stats.active}</div>
-                <p className="text-xs text-muted-foreground">Currently active</p>
-              </>
-            )}
+            <div className="text-2xl font-bold">{stats.active}</div>
+            <p className="text-xs text-muted-foreground">Currently active</p>
           </CardContent>
         </Card>
         <Card>
@@ -400,14 +364,8 @@ export default function UsersPage() {
             <CardTitle className="text-sm font-medium">Admins</CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{stats.admins}</div>
-                <p className="text-xs text-muted-foreground">Admin accounts</p>
-              </>
-            )}
+            <div className="text-2xl font-bold">{stats.admins}</div>
+            <p className="text-xs text-muted-foreground">Admin accounts</p>
           </CardContent>
         </Card>
         <Card>
@@ -415,14 +373,8 @@ export default function UsersPage() {
             <CardTitle className="text-sm font-medium">Managers</CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{stats.managers}</div>
-                <p className="text-xs text-muted-foreground">Manager accounts</p>
-              </>
-            )}
+            <div className="text-2xl font-bold">{stats.managers}</div>
+            <p className="text-xs text-muted-foreground">Manager accounts</p>
           </CardContent>
         </Card>
       </div>
@@ -488,13 +440,7 @@ export default function UsersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-                  </TableCell>
-                </TableRow>
-              ) : filteredUsers.length > 0 ? (
+              {filteredUsers.length > 0 ? (
                 filteredUsers.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell>

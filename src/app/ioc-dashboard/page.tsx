@@ -35,6 +35,7 @@ import CompoundChart from "@/components/ioc/widgets/compound-chart";
 import TaxAnalytics from "@/components/ioc/widgets/tax-analytics";
 import VehicleCounting from "@/components/ioc/widgets/vehicle-counting";
 import HumanCounting from "@/components/ioc/widgets/human-counting";
+import { getActiveNewsTickerItems } from "@/lib/news-ticker-storage";
 import { API_BASE_URL } from "@/lib/api";
 
 // Dynamically import GoogleMap with no SSR
@@ -176,38 +177,36 @@ export default function IOCDashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch news ticker
-  const fetchNewsTicker = useCallback(async () => {
+  // Load news ticker from localStorage (no API)
+  const fetchNewsTicker = useCallback(() => {
     try {
       setIsLoadingNews(true);
-      const response = await fetch(`${API_BASE_URL}/api/news-ticker/active`);
-      const data = await response.json();
-
-      if (data.success && Array.isArray(data.data)) {
-        const formattedItems = data.data
-          .map((item: any) => {
-            if (item.title && item.content) {
-              return `${item.title} - ${item.content}`;
-            }
-            return item.title || item.content || '';
-          })
-          .filter((item: string) => item.length > 0);
-        setNewsItems(formattedItems);
-      } else {
-        setNewsItems([]);
-      }
-    } catch (error) {
+      const active = getActiveNewsTickerItems();
+      const formattedItems = active
+        .map((item) => {
+          if (item.title && item.content) return `${item.title} - ${item.content}`;
+          return item.title || item.content || "";
+        })
+        .filter((s: string) => s.length > 0);
+      setNewsItems(formattedItems);
+    } catch {
       setNewsItems([]);
     } finally {
       setIsLoadingNews(false);
     }
   }, []);
 
-  // Fetch news on mount and refresh every 30 seconds
   useEffect(() => {
     fetchNewsTicker();
-    const refreshInterval = setInterval(fetchNewsTicker, 30000);
-    return () => clearInterval(refreshInterval);
+    const interval = setInterval(fetchNewsTicker, 30000);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "news_ticker_items" || e.key === null) fetchNewsTicker();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("storage", onStorage);
+    };
   }, [fetchNewsTicker]);
 
   // Get user from localStorage (optimized - only check on mount and storage events)
